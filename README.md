@@ -1,6 +1,6 @@
 # usbip
 
-ZIP-Download: Release-Page
+ZIP-Download: [Release-Page](https://github.com/psct/usbip/releases)
 
 ## German
 
