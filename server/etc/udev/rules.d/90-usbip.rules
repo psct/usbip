@@ -1,0 +1,14 @@
+# Part of an article in german c't magazine (https://ct.de)
+# more on https://github.com/psct/usbip
+SUBSYSTEM!="usb", GOTO="usbipexit"
+
+# start service for mentioned usb device so they get shared by usb/ip
+# uncomment line and insert your id for vendor and product lsusb shows for your usb device
+#ACTION=="add", ATTR{idVendor}=="1a86", ATTR{idProduct}=="7523", TAG+="usbip", TAG+="systemd", ENV{SYSTEMD_WANTS}+="usbip@%k.service"
+#ACTION=="add", ATTR{idVendor}=="0403", ATTR{idProduct}=="6001", TAG+="usbip", TAG+="systemd", ENV{SYSTEMD_WANTS}+="usbip@%k.service"
+
+# remove by SYSTEMD_WANTS does not work according to https://github.com/systemd/systemd/issues/7587, so use systemctl
+ACTION=="remove", TAG=="usbip", RUN+="/usr/bin/systemctl --no-block stop usbip@%k.service"
+
+#End Of File
+LABEL="usbipexit"

@@ -1,0 +1,21 @@
+# Part of an article in german c't magazine (https://ct.de)
+# more on https://github.com/psct/usbip
+[Unit]
+Description=USB/IP share usb device on given usb port %i; called by device specific udev rule
+After=network-online.target usbipd.service
+Wants=network-online.target usbipd.service
+PartOf=usbipd.service
+
+[Service]
+Type=simple
+RemainAfterExit=yes
+
+# share device by bind 
+ExecStart=/bin/sh -c "/usr/sbin/usbip bind -b %i"
+
+# stop sharing
+ExecStop=-/bin/sh -c "/usr/sbin/usbip unbind -b %i"
+
+[Install]
+WantedBy=multi-user.target
+

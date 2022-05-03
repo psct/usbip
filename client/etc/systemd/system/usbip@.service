@@ -1,0 +1,29 @@
+# Part of an article in german c't magazine (https://ct.de)
+# more on https://github.com/psct/usbip
+[Unit]
+Description=USB/IP attach/detach usb dev %i
+After=network-online.target usbipd.service
+Wants=network-online.target usbipd.service
+PartOf=usbipd.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=1
+RemainAfterExit=yes
+
+# %i contains IPv4/IPv6/hostname:vendor:product
+# connect to remote usb dev
+# list shared devices, pick (first) bus id of dev with :vendor:productid
+# get IPv4/IPv6/hostname from parameter: echo %i | rev | cut -d: -f1,2 --complement | rev
+# get :vendor:product from parameter: echo %i | rev | cut -d: -f1,2 | rev
+ExecStart=/bin/sh -c "usbip attach -r $(echo %i | rev | cut -d: -f1,2 --complement | rev) -b $(usbip list -r $(echo %i | rev | cut -d: -f1,2 --complement | rev) | grep $(echo %i | rev | cut -d: -f1,2 | rev) | cut -d: -f1)"
+
+# disconnect from remote usb dev
+# throw away header, concat to one line (paste), pick IPv4/IPv6, cut port
+# but: beforehand check if dev connected at all. Otherwise `usbip detach --port=` would disconnect any device attached on port 0 (if no port specified).
+ExecStop=-/bin/sh -c "usbip port | grep -v "^I" | grep -v "^=" | paste - - - - | grep $(echo %i | rev | cut -d: -f1,2 | rev) | grep $(echo %i | rev | cut -d: -f1,2 --complement | rev) | grep -qP "[0-9]+" && usbip detach --port=$(usbip port | grep -v "^I" | grep -v "^=" | paste - - - - | grep $(echo %i | rev | cut -d: -f1,2 | rev) | grep $(echo %i | rev | cut -d: -f1,2 --complement | rev) | cut -b6-7)"
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,23 @@
+# Part of an article in german c't magazine (https://ct.de)
+# more on https://github.com/psct/usbip
+[Unit]
+Description=USB/IP client module loader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RemainAfterExit=yes
+ 
+#ExecStartPre=/bin/sh -c "/sbin/insmod /lib/modules/$(uname -r)/kernel/drivers/usb/usbip/usbip-core.ko"
+#ExecStart=/bin/sh -c "/sbin/insmod /lib/modules/$(uname -r)/kernel/drivers/usb/usbip/vhci-hcd.ko"
+ExecStart=/sbin/modprobe vhci-hcd
+
+# unload previously loaded modules
+# unloading produces ooopses
+#ExecStop=/usr/sbin/modprobe -r usbip-core
+
+[Install]
+WantedBy=multi-user.target
+

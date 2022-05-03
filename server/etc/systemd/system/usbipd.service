@@ -1,0 +1,24 @@
+# Part of an article in german c't magazine (https://ct.de)
+# more on https://github.com/psct/usbip
+[Unit]
+Description=USB/IP load modules and start daemon for sharing
+After=network-online.target
+Wants=network-online.target
+
+# bad idea, kernel panics sometimes, so leave it alone
+# StopWhenUnneeded=true
+
+[Service]
+Type=simple
+Restart=always
+
+# usbip-host will start usbip-core by itself 
+ExecStartPre=/sbin/modprobe usbip-host
+ExecStart=/bin/sh -c "/usr/sbin/usbipd"
+
+# unload modules
+ExecStop=/usr/sbin/rmmod usbip-host
+ExecStop=/usr/sbin/rmmod usbip-core
+
+[Install]
+WantedBy=multi-user.target
