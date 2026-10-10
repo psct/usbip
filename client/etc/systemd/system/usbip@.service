@@ -1,29 +1,98 @@
-# Part of an article in german c't magazine (https://ct.de)
-# more on https://github.com/psct/usbip
 [Unit]
-Description=USB/IP attach/detach usb dev %i
+Description=Attach and detach a USB/IP remote device: %I
+Documentation=https://github.com/psct/usbip
 After=network-online.target usbipd.service
 Wants=network-online.target usbipd.service
 PartOf=usbipd.service
 
+# Restart indefinitely without exceeding the unit start rate limit., match the
+# 'Restart*=...' options below:
+StartLimitIntervalSec=60s
+StartLimitBurst=6
+
 [Service]
-Type=simple
+Type=exec
+
+# Recover after network interruptions, for example after rebooting the LAN
+# router. Attempt to re-attach quickly at first and then every minute indefinitely:
 Restart=on-failure
-RestartSec=1
-RemainAfterExit=yes
+RestartSec=1s
+RestartSteps=5
+RestartMaxDelaySec=60s
 
-# %i contains IPv4/IPv6/hostname:vendor:product
-# connect to remote usb dev
-# list shared devices, pick (first) bus id of dev with :vendor:productid
-# get IPv4/IPv6/hostname from parameter: echo %i | rev | cut -d: -f1,2 --complement | rev
-# get :vendor:product from parameter: echo %i | rev | cut -d: -f1,2 | rev
-ExecStart=/bin/sh -c "usbip attach -r $(echo %i | rev | cut -d: -f1,2 --complement | rev) -b $(usbip list -r $(echo %i | rev | cut -d: -f1,2 --complement | rev) | grep $(echo %i | rev | cut -d: -f1,2 | rev) | cut -d: -f1)"
+# Attach to the remote USB device specified by the '%I' instance name:
+#
+#     IPv4/IPv6/hostname:vendor:product
+#
+ExecStart=/bin/sh -eu -c ' \
+    # Extract discreet values from the unit instance name. Start from the end of the \
+    # instance name for the "vendor" and "product" IDs that never contain ":", leaving \
+    # only the "remote" address so it can contain ":" colon characters: \
+    remote="$${1}" ; shift ; \
+    product="$${remote##*:}" ; \
+    remote="$${remote%:*}" ; \
+    vendor="$${remote##*:}" ; \
+    remote="$${remote%:*}" ; \
+    # Idenitfy the *first* remote USB bus ID for the device vendor and product: \
+    usbip_list_re="^[[:space:]]+([^[:space:]:]+):" ; \
+    usbip_list_re="$${usbip_list_re}[[:space:]]+.*\\($${vendor}:$${product}\\)$$" ; \
+    remote_busid="$$( \
+        usbip list --remote="$${remote}" | \
+        sed -nE "s/$${usbip_list_re}/\\1/Ip" | \
+        head --lines="1" \
+    )" ; \
+    # Attach the device: \
+    echo "+" usbip attach --remote="$${remote}" --busid="$${remote_busid}" >&2 ; \
+    usbip attach --remote="$${remote}" --busid="$${remote_busid}" ; \
+    sleep "1" ; \
+    # Idenitfy the *first* local port for the now attached device vendor and product: \
+    usbip_port_re="^Port +([0-9]+)[^\\t]*\\t[^\\t]*\\($${vendor}:$${product}\\)\\t" ; \
+    local_busid="$$( \
+        usbip port | \
+	# Include only lines containing port details: \
+        grep -iE "^(Port|[[:space:]]+)" | \
+	# Join the 4 per-port output lines for filtering: \
+        paste "-" "-" "-" "-" | \
+	# Extract the USB bus ID for the matching device: \
+        sed -nE "s/$${usbip_port_re} +([^ ]+) +-> +.*/\\2/Ip" | \
+        head --lines="1" \
+    )" ; \
+    # Fail the device is not actually atttached: \
+    test -n "$${local_busid}" ; \
+    # Fail the service if the resulting device is removed: \
+    echo "+" udevadm wait --removed "/sys/bus/usb/devices/$${local_busid}" ; \
+    udevadm wait --removed "/sys/bus/usb/devices/$${local_busid}" && exit "1" \
+    ' "ExecStart" "%I"
 
-# disconnect from remote usb dev
-# throw away header, concat to one line (paste), pick IPv4/IPv6, cut port
-# but: beforehand check if dev connected at all. Otherwise `usbip detach --port=` would disconnect any device attached on port 0 (if no port specified).
-ExecStop=-/bin/sh -c "usbip port | grep -v "^I" | grep -v "^=" | paste - - - - | grep $(echo %i | rev | cut -d: -f1,2 | rev) | grep $(echo %i | rev | cut -d: -f1,2 --complement | rev) | grep -qP "[0-9]+" && usbip detach --port=$(usbip port | grep -v "^I" | grep -v "^=" | paste - - - - | grep $(echo %i | rev | cut -d: -f1,2 | rev) | grep $(echo %i | rev | cut -d: -f1,2 --complement | rev) | cut -b6-7)"
+# Detach from the remote USB device:
+ExecStop=/bin/sh -eu -c ' \
+    # Extract discreet values from the unit instance name as for "ExecStart=...": \
+    remote="$${1}" ; shift ; \
+    product="$${remote##*:}" ; \
+    remote="$${remote%:*}" ; \
+    vendor="$${remote##*:}" ; \
+    remote="$${remote%:*}" ; \
+    # Idenitfy the *first* attached port for the device vendor and product: \
+    usbip_port_re="^Port +([0-9]+)[^\\t]*\\t[^\\t]*\\($${vendor}:$${product}\\)\\t" ; \
+    port="$$( \
+        usbip port | \
+	# Include only lines containing port details: \
+        grep -iE "^(Port|[[:space:]]+)" | \
+	# Join the 4 per-port output lines for filtering: \
+        paste "-" "-" "-" "-" | \
+	# Extract the attached port number: \
+        sed -nE "s/$${usbip_port_re}.*/\\1/Ip" | \
+        head --lines="1" \
+    )" ; \
+    if test -z "$${port}" ; \
+    then \
+        echo "Already detached" >&2 ; \
+        exit ; \
+    fi ; \
+    # Detach the device and let SystemD kill the "# udevadm wait --removed" command: \
+    echo "+" usbip detach --port="$${port}" >&2 ; \
+    usbip detach --port="$${port}" \
+    ' "ExecStop" "%I"
 
 [Install]
 WantedBy=multi-user.target
-

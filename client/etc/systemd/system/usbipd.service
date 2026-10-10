@@ -1,7 +1,6 @@
-# Part of an article in german c't magazine (https://ct.de)
-# more on https://github.com/psct/usbip
 [Unit]
 Description=USB/IP client module loader
+Documentation=https://github.com/psct/usbip
 After=network-online.target
 Wants=network-online.target
 
@@ -20,4 +19,3 @@ ExecStart=/sbin/modprobe vhci-hcd
 
 [Install]
 WantedBy=multi-user.target
-
